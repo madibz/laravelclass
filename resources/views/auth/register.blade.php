@@ -1,4 +1,4 @@
-<form method="POST", action="{{route('api.register')}}">
+<form method="POST", action="{{route('register.submit')}}">
     @csrf
     <input type="text" name="username" placeholder="Username">
     <input type="email" name="email" placeholder="Name">

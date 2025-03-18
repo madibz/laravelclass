@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/users/login', [UserController::class, 'login'])->name('api.login');
 Route::post('/users/register', [UserController::class, 'register'])->name('api.register');
+Route::post('/logout/logout', [UserController::class, 'logout'])->name('api.logout');
+
 
 Route::middleware('auth:sanctum')->group(function (){
     Route::get('/users', [UserController::class, 'index']);
