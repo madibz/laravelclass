@@ -4,9 +4,18 @@ namespace App\Http\Controllers;
  
 use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
  
 class UserController extends Controller
 {
+
+    public function showLogin(){
+        return view('auth.login');
+    }
+
+    public function showRegister(){
+        return view('auth.register');
+    }
     /**
      * Display a listing of the resource.
      */
@@ -53,6 +62,44 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error creating user : '. $e->getMessage()], 500);
         }
+    }
+ 
+    /**
+     * Login a user.
+     */
+    public function login(Request $request) {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+ 
+        $user = User::where('email', $request->email)->first();
+        if (!$user || !\Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+ 
+        $token = $user->createToken('auth_token')->plainTextToken;
+ 
+        return response()->json([
+            'message' => 'User logged in successfully',
+            'user' => $user,
+            'token' => $token
+        ], 200);
+    }
+ 
+    /**
+     * Logout the current logged in user
+     */
+    public function logout(Request $request) {
+        $request->user()->tokens()->delete();
+        return response()->json(['message' => 'Logged out'], 200);
+    }
+ 
+    /**
+     * Get current logged in user information
+     */
+    public function me(Request $request) {
+        return response()->json($request->user());
     }
  
     /**
