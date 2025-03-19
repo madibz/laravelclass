@@ -1,41 +1,50 @@
 <?php
- 
+
 namespace App\Http\Controllers;
- 
+
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
- 
+use Illuminate\Support\Facades\Storage;
+
 class UserController extends Controller
 {
- 
-    public function showLogin() {
+    public function showLogin()
+    {
         return view('auth.login');
     }
- 
-    public function showRegister() {
+
+    public function showRegister()
+    {
         return view('auth.register');
     }
- 
-    // public function showProfile() {
-    //     return view('auth.profile');
-    // }
- 
+
     /**
-     * Display a listing of the resource.
+     * Affiche la page de profil
      */
-    // Get All Users
+    public function profile()
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return redirect()->route('login')->with('error', 'Vous devez être connecté.');
+        }
+        return view('auth.profile', compact('user'));
+    }
+
+    /**
+     * Récupérer tous les utilisateurs (API)
+     */
     public function index()
     {
         try {
             return response()->json(User::all());
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Error fetching users' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Erreur lors de la récupération des utilisateurs: ' . $e->getMessage()], 500);
         }
     }
- 
+
     /**
-     * Register a newly created resource in storage.
+     * Inscription d'un nouvel utilisateur
      */
     public function register(Request $request)
     {
@@ -44,162 +53,157 @@ class UserController extends Controller
                 'username' => 'required|string|max:255|unique:users',
                 'email' => 'required|email|unique:users',
                 'password' => 'required|string|min:4',
+                'bio' => 'nullable|string',
+                'profile_picture' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048'
             ]);
-   
+
+            $profilePicturePath = null;
+
+            if ($request->hasFile('profile_picture')) {
+                $profilePicturePath = $request->file('profile_picture')->store('profile_pictures', 'public');
+            }
+
             $user = User::create([
                 'username' => $request->username,
                 'email' => $request->email,
                 'password' => bcrypt($request->password),
                 'bio' => $request->bio,
-                'profile_picture' => $request->profile_picture
+                'profile_picture' => $profilePicturePath
             ]);
- 
+
             if ($request->wantsJson()) {
                 $token = $user->createToken('auth_token')->plainTextToken;
                 return response()->json([
-                    'message' => 'User registered successfully',
+                    'message' => 'Utilisateur créé avec succès',
                     'user' => $user,
                     'token' => $token
                 ], 201);
             }
-           
+
             auth()->login($user);
-            return redirect()->route('login')->with('success', 'Registration successful! Please login.');
- 
+            return redirect()->route('profile')->with('success', 'Compte créé avec succès.');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            if ($request->wantsJson()) {
-                return response()->json(['message' => 'Validation error', 'errors' => $e->errors()], 422);
-            }
             return redirect()->back()->withErrors($e->errors())->withInput();
-        } catch (\Exception $e) {
-            if ($request->wantsJson()) {
-                return response()->json(['message' => 'Error creating user : '. $e->getMessage()], 500);
-            }
-            return redirect()->back()->with('error', 'Error creating user: ' . $e->getMessage())->withInput();
         }
     }
- 
+
     /**
-     * Login a user.
+     * Connexion utilisateur
      */
-    public function login(Request $request) {
+    public function login(Request $request)
+    {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
- 
+
         $credentials = $request->only('email', 'password');
-       
+
         if (auth()->attempt($credentials)) {
             $user = auth()->user();
-           
+
             if ($request->wantsJson()) {
                 $token = $user->createToken('auth_token')->plainTextToken;
                 return response()->json([
-                    'message' => 'User logged in successfully',
+                    'message' => 'Connexion réussie',
                     'user' => $user,
                     'token' => $token
                 ], 200);
             }
-           
-            return redirect()->route('profile')->with('success', 'Logged in successfully!');
+
+            return redirect()->route('profile')->with('success', 'Connexion réussie!');
         }
-       
-        if ($request->wantsJson()) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-       
-        return redirect()->back()->with('error', 'Invalid credentials')->withInput();
+
+        return redirect()->back()->with('error', 'Identifiants invalides')->withInput();
     }
- 
+
     /**
-     * Logout the current logged in user
+     * Déconnexion utilisateur
      */
-    public function logout(Request $request) {
+    public function logout(Request $request)
+    {
         $request->user()->tokens()->delete();
-        return response()->json(['message' => 'Logged out'], 200);
+        return response()->json(['message' => 'Déconnexion réussie'], 200);
     }
- 
+
     /**
-     * Web logout method
+     * Déconnexion pour le web
      */
-    public function webLogout() {
+    public function webLogout()
+    {
         auth()->logout();
-        return redirect()->route('home')->with('success', 'Logged out successfully');
+        return redirect()->route('home')->with('success', 'Déconnexion réussie');
     }
- 
+
     /**
-     * Get current logged in user information
+     * Récupère les infos de l'utilisateur connecté (API)
      */
-    public function me(Request $request) {
+    public function me(Request $request)
+    {
         return response()->json($request->user());
     }
- 
+
     /**
-     * Display the specified resource.
+     * Afficher un utilisateur spécifique (API)
      */
-    // Get One User
     public function show(User $user)
     {
         return response()->json($user);
     }
- 
+
     /**
-     * Update the specified resource in storage.
+     * Mise à jour du profil utilisateur
      */
-    public function update(Request $request, $id)
+    public function update(Request $request)
     {
         try {
-            $user = User::find($id);
+            $user = auth()->user();
             if (!$user) {
-                return response()->json(['message' => 'User not found'], 404);
+                return redirect()->route('login')->with('error', 'Vous devez être connecté.');
             }
- 
+
             $validatedData = $request->validate([
                 'username' => 'string|max:255|unique:users,username,' . $user->id,
                 'email' => 'email|unique:users,email,' . $user->id,
-                'password' => 'string|min:4',
+                'password' => 'nullable|string|min:4',
+                'bio' => 'nullable|string',
+                'profile_picture' => 'nullable|image|mimes:jpg,png,jpeg,gif|max:2048'
             ]);
- 
-            if($request->filled('password')) {
+
+            if ($request->filled('password')) {
                 $validatedData['password'] = bcrypt($request->password);
             }
-            if (!empty($validatedData)) {
-                $user->update($validatedData);
+
+            if ($request->hasFile('profile_picture')) {
+                if ($user->profile_picture) {
+                    Storage::disk('public')->delete($user->profile_picture);
+                }
+
+                $validatedData['profile_picture'] = $request->file('profile_picture')->store('profile_pictures', 'public');
             }
-            $user->refresh();
-            return response()->json(['message' => 'User updated', 'user' => $user], 200);
+
+            $user->update($validatedData);
+            return redirect()->route('profile')->with('success', 'Profil mis à jour.');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['message' => 'Validation error', 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error creating user : '. $e->getMessage()], 500);
+            return redirect()->back()->withErrors($e->errors())->withInput();
         }
     }
- 
+
     /**
-     * Remove the specified resource from storage.
+     * Suppression du compte utilisateur
      */
-    public function destroy($id)
+    public function destroy()
     {
-        try {
-            $user = User::find($id);
-            if (!$user) {
-                return response()->json(['message' => 'User not found'], 404);
-            }
-   
-            $user->delete();
-            return response()->json(['message' => 'User deleted'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error deleting user: ' . $e->getMessage()], 500);
-        }
-    }
- 
-    public function profile(Request $request) {
         $user = auth()->user();
-        if(!$user) {
-            return redirect()->route('login')->with('error', 'You are not logged in');
+        if (!$user) {
+            return redirect()->route('login')->with('error', 'Vous devez être connecté.');
         }
-        return view('auth.profile', compact('user'));
+
+        if ($user->profile_picture) {
+            Storage::disk('public')->delete($user->profile_picture);
+        }
+
+        $user->delete();
+        return redirect()->route('register')->with('success', 'Compte supprimé avec succès.');
     }
-   
 }
